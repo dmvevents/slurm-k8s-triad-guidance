@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>What each thing actually is — SUNK, Slinky, ours</title>
+<link rel="stylesheet" href="../assets/site.css"/>
+</head>
+<body>
+<header class="site">
+  <span class="brand">Slurm-on-K8s Triad</span>
+  <nav>
+    <a href="../index.html">Overview</a>
+    <a href="01-what-each-is.html" style="color:var(--ink)">01 · What each is</a>
+    <a href="02-matrix.html">02 · Matrix</a>
+    <a href="03-dynamic-scale.html">03 · Dynamic scale</a>
+    <a href="04-test-plan.html">04 · Test plan</a>
+  </nav>
+</header>
+<div class="wrap">
+  <h1>What each thing actually is</h1>
+  <p class="sub">Naming is misleading in this space: one option is an installer for something you cannot see,
+  another is named for a platform it does not integrate with. This page states what is actually in each
+  artifact.</p>
+
+  <h2>SUNK — <code>coreweave/sunk-anywhere</code></h2>
+  <div class="panel isnot">
+    <h3>What is public</h3>
+    <p><code>docs/</code>, <code>helm-values/</code>, <code>examples/</code> (6 validation scripts),
+    <code>infrastructure/</code> (provider patches), <code>skills/</code> (agent playbooks),
+    <code>AGENTS.md</code>, <code>CLAUDE.md</code>. <b>No</b> <code>charts/</code>, <b>no</b>
+    operator/controller Go, <b>no</b> Dockerfiles, <b>no</b> CRD definitions.</p>
+    <h3>Deploy model</h3>
+    <p>You point an AI coding agent (Claude Code / Gemini / Cursor) at the repo and say "Deploy SUNK on EKS";
+    the agent reads a provider skill and drives <code>helm</code>/<code>kubectl</code> against the
+    <b>proprietary</b> chart repo you were licensed.</p>
+    <h3>What it ships when charts are available</h3>
+    <p>SUNK operator + Slurm (controller, accounting, login, syncer, pod scheduler), cert-manager, MOCO MySQL
+    (slurmdbd store), in-cluster NFS (<code>/home</code>), DCGM GPU monitoring, cloud dashboards, one default
+    POSIX user. GPU node pool + LDAP/authentik + SkyPilot are opt-in.</p>
+    <p class="legend">[verified: repo tree + README Quick Start, HEAD <code>ca81a7a3</code>]</p>
+  </div>
+
+  <h2>Slinky — <code>SlinkyProject/slurm-operator</code> + <code>slurm-bridge</code></h2>
+  <div class="panel is">
+    <p>A real Kubernetes operator: CRDs (<code>nodeset</code>, <code>loginset</code>, <code>accounting</code>,
+    <code>restapi</code>, <code>token</code>), controllers, and Helm charts all in-repo under Apache-2.0,
+    published to ghcr.io. <code>slurmctld</code> runs as a pod. The companion <code>slurm-bridge</code> is a
+    K8s scheduler that binds K8s workloads through the Slurm controller, which is what makes true
+    gang/co-scheduling of mixed K8s+Slurm work possible.</p>
+    <p>On AWS, the official <code>awslabs/ai-on-eks</code> Slinky blueprint supplies the EFA layer the
+    operator deliberately leaves out: the EFA device resource on the slurmd NodeSet and the aws-ofi-nccl
+    stack copied from the AWS Deep Learning Container.</p>
+    <p class="legend">[verified: SlinkyProject/slurm-operator repo + slurm-bridge README + awslabs/ai-on-eks blueprint]</p>
+  </div>
+
+  <h2>Ours — <code>slurm-on-eks-hyperpod</code></h2>
+  <div class="panel">
+    <p>A hand-written port of Google's GKE Slurm reference, built as plain StatefulSets/Deployments with
+    headless-service DNS — no operator, no CRDs. Slurm 24.05.4 built from source. GPU via the device plugin;
+    EFA configured through environment variables (<code>FI_PROVIDER=efa</code>,
+    <code>FI_EFA_USE_DEVICE_RDMA=1</code>) rather than requesting the
+    <code>vpc.amazonaws.com/efa</code> device.</p>
+    <p><b>Important framing:</b> it is <i>not</i> Slinky-derived. Slinky was studied as reference only. A
+    sibling repo (<code>eks-slurm-on-k8s</code>) has since been gutted into an MCP scaffolding harness — its
+    last commit deleted 6,457 lines of manifests and scripts. And despite the name, there is <b>no SageMaker
+    HyperPod API integration</b>; the coupling is naming-only.</p>
+    <p>What it has genuinely demonstrated: NCCL-over-EFA multi-node, FSDP, and hybrid Slurm↔K8s on 2×H100.</p>
+    <p class="legend">[verified: local git log + grep, both repos; manifests + docs]</p>
+  </div>
+
+  <div class="foot">Next: <a href="02-matrix.html">the ten-dimension matrix</a> ·
+  <a href="03-dynamic-scale.html">dynamic scaling</a></div>
+</div>
+</body>
+</html>

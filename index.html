@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Slurm on Kubernetes: SUNK vs Slinky vs a homegrown operator-less port</title>
+<link rel="stylesheet" href="assets/site.css"/>
+</head>
+<body>
+<header class="site">
+  <span class="brand">Slurm-on-K8s Triad</span>
+  <nav>
+    <a href="index.html" style="color:var(--ink)">Overview</a>
+    <a href="sections/01-what-each-is.html">01 · What each is</a>
+    <a href="sections/02-matrix.html">02 · Matrix</a>
+    <a href="sections/03-dynamic-scale.html">03 · Dynamic scale</a>
+    <a href="sections/04-test-plan.html">04 · Test plan</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Slurm on Kubernetes: SUNK vs Slinky vs a homegrown port <span class="pill d">desk analysis</span></h1>
+  <p class="sub">Three ways to run Slurm on Kubernetes, evaluated for an AWS P5/P5en + EFA fleet. This is a
+  <b>desk analysis</b>: every claim below is tagged with the source that supports it, and the claims we could
+  not substantiate are marked <span class="mut">UNVERIFIED</span> rather than guessed. The live performance
+  arms (NCCL-at-scale, small-training comm scalability, dynamic-scale latency) are <b>designed but not yet
+  run</b> — they are honestly labelled as such throughout, and no number appears on this site that was not
+  measured.</p>
+
+  <h2>The one-paragraph answer</h2>
+  <div class="panel">
+    <p><b>Slinky</b> is the only fully-open, production-grade option: Apache-2.0, 1,253+ commits, tagged
+    through v1.2.0, real CRDs and controllers in-repo, backed by SchedMD — and on AWS its EFA path is already
+    solved by the official <code>ai-on-eks</code> blueprint, so moving to P5/P5en is a values edit rather than
+    new plumbing. <b>SUNK</b> is a polished, agent-driven install experience, but the public
+    <code>sunk-anywhere</code> repo is an installer/wrapper only — the operator, charts, CRDs and images are
+    CoreWeave-proprietary and license-gated — and its open EKS recipe explicitly ships <b>no EFA/RDMA</b>
+    (plain TCP NCCL, ~1/10 bandwidth by its own docs, <code>g5.xlarge</code> default). Treat it as a
+    competitive/UX reference, not adoptable perf tech. <b>Ours</b> is the only one we fully control and have
+    actually run NCCL-over-EFA + FSDP + hybrid Slurm↔K8s on — but it is a fixed-size, hand-operated, 2-node
+    demonstrator: no operator, no autoscaling, EFA by env-var rather than device plugin.</p>
+  </div>
+
+  <h2>Three findings worth stating plainly</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>1. SUNK is not open-sourced</h3>
+      <p class="mut"><code>coreweave/sunk-anywhere</code> is a one-commit Apache-2.0 installer/wrapper: docs,
+      Helm <i>values</i>, validation scripts, agent "skills". No <code>charts/</code>, no operator Go, no
+      CRDs, no Dockerfiles. The engine is proprietary
+      (<code>email sunk@coreweave.com</code>, <code>&lt;COREWEAVE_HELM_REPO_URL&gt;</code> placeholder).</p>
+      <p class="legend">[verified: repo tree, HEAD <code>ca81a7a3</code>]</p>
+    </div>
+    <div class="card">
+      <h3>2. Its open EKS path has no RDMA</h3>
+      <p class="mut">SUNK's own skill doc says the EKS profile "uses plain TCP for NCCL (no RDMA)… ~1/10th
+      bandwidth… not perf benchmarks." Default GPU is <code>g5.xlarge</code> (A10G); p5 is opt-in and
+      "blows budget". For a P5/P5en + EFA fleet this is the sharpest differentiator.</p>
+      <p class="legend">[verified: skills/eks/add-gpu-nodes-to-eks/SKILL.md:238; no EFA wiring in cluster-config.yaml or base/sunk-values.yaml]</p>
+    </div>
+    <div class="card">
+      <h3>3. Ours is not Slinky-derived</h3>
+      <p class="mut">Our implementation is a hand-written port of Google's GKE Slurm which studied Slinky as
+      <i>reference only</i>. A sibling repo has since been gutted to an MCP scaffolding harness (its last
+      commit deleted 6,457 lines). Custom, not a fork.</p>
+      <p class="legend">[verified: local git log + grep, both repos]</p>
+    </div>
+  </div>
+
+  <h2>Where each one wins</h2>
+  <div class="panel is">
+    <h3>Slinky — openness, maturity, lifecycle automation, and a solved EFA path on AWS</h3>
+    <p>Only genuinely open-source end-to-end; vendor-backed by SchedMD; real release cadence; NodeSet
+    scale-to-zero/HPA and drain-aware lifecycle built in. The operator itself is EFA-agnostic, but AWS's
+    ai-on-eks Slinky blueprint ships the full path (<code>vpc.amazonaws.com/efa</code> device +
+    aws-ofi-nccl from the DLC on <code>slurmd:25.11.1</code>). <b>Cost:</b> newest Slurm (25.11) and K8s
+    (1.29) floors, and the blueprint defaults to <code>g5.8xlarge</code> — so line-rate NCCL on P5/P5en
+    remains the thing to <i>measure</i>.</p>
+  </div>
+  <div class="panel">
+    <h3 class="warn">SUNK — batteries-included onboarding, for CoreWeave customers, at demo grade</h3>
+    <p>A polished install experience (opt-out monitoring, GPU health, SkyPilot) and EKS is validated E2E —
+    but on A10G over plain TCP NCCL. Because the engine is license-gated it is <b>not</b> an open substrate a
+    platform team can adopt or fork, and the open recipe would need the entire EFA path added to reach the
+    P5/P5en regime.</p>
+  </div>
+  <div class="panel">
+    <h3>Ours — transparency and a proven EFA multi-node + hybrid demonstrator</h3>
+    <p>The only one we fully control and have actually run NCCL-over-EFA + FSDP + hybrid Slurm↔K8s on
+    (2×H100). But: fixed-size, hand-operated, single-author, no operator, no autoscaling, no HyperPod API
+    coupling, EFA plumbed by env-var rather than the device plugin. A demonstrator, not a product.</p>
+  </div>
+
+  <h2>Can we dynamically scale?</h2>
+  <table>
+    <tr><th>Layer</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td>Slurm-pod layer</td><td class="warn">Chart has NodeSet scale-to-zero; open recipe doesn't wire it</td>
+        <td class="good">replicas N↔0 + HPA scale subresource</td><td class="bad">Fixed <code>replicas: 2</code></td></tr>
+    <tr><td>Node layer</td><td class="warn">eksctl pinned <code>desiredCapacity:1/maxSize:1</code></td>
+        <td class="good">Karpenter (blueprint nodepool)</td><td class="bad">None — future work</td></tr>
+    <tr><td>Drain-aware lifecycle</td><td class="mut">UNVERIFIED (proprietary chart)</td>
+        <td class="good">Operator drains Slurm node before pod termination</td><td class="bad">No drain-aware controller</td></tr>
+    <tr><td class="good"><b>Verdict</b></td><td class="warn"><b>PARTIAL</b></td><td class="good"><b>YES</b></td><td class="bad"><b>NO</b></td></tr>
+  </table>
+  <p class="legend">[verified: nodeset_types.go ScalingMode enum + <code>+kubebuilder:subresource:scale</code>;
+  values.yaml <code>nodesetDefaults</code>; blueprint <code>karpenter.sh/nodepool</code>; ours:
+  <code>08-slurmd-statefulset.yaml</code> + static <code>NodeName=slurmd-[0-1]</code> in slurm.conf]</p>
+
+  <div class="warnbox">
+    <b>What is not measured yet.</b> NCCL busbw at scale under each arm, small-training communication
+    scalability (1→2 nodes), and scale-up latency (pod layer vs Karpenter node provisioning) are
+    <b>designed, not run</b> — they need a free 2×p5en pair. See <a href="sections/04-test-plan.html">the test
+    plan</a> for the exact gates. Nothing on this site quotes an unmeasured number.
+  </div>
+
+  <div class="foot">
+    Desk analysis 2026-07-24, upstream anchors refreshed 2026-07-29 (slinky HEAD <code>b2261553</code>,
+    sunk-anywhere <code>ca81a7a3</code>). Claims tagged <code>[verified: source]</code> or
+    <code>UNVERIFIED</code>. The hands-on evaluation belongs to the platform team; this site is the desk
+    matrix that scopes it.
+  </div>
+</div>
+</body>
+</html>

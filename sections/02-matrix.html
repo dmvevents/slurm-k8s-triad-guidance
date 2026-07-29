@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Evaluation matrix — SUNK vs Slinky vs ours</title>
+<link rel="stylesheet" href="../assets/site.css"/>
+</head>
+<body>
+<header class="site">
+  <span class="brand">Slurm-on-K8s Triad</span>
+  <nav>
+    <a href="../index.html">Overview</a>
+    <a href="01-what-each-is.html">01 · What each is</a>
+    <a href="02-matrix.html" style="color:var(--ink)">02 · Matrix</a>
+    <a href="03-dynamic-scale.html">03 · Dynamic scale</a>
+    <a href="04-test-plan.html">04 · Test plan</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <h1>Evaluation matrix <span class="pill d">every cell sourced</span></h1>
+  <p class="sub">Ten dimensions across the three options. Cells marked <span class="mut">UNVERIFIED</span> are
+  claims we could not substantiate from public material — usually because the artifact is license-gated. No
+  cell is filled by inference.</p>
+
+  <h2>Open-source reality</h2>
+  <table>
+    <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td><b>Open-source reality</b></td>
+        <td class="warn">Wrapper only (Apache-2.0); core charts/operator/images <b>proprietary</b>, license-gated</td>
+        <td class="good"><b>Fully open</b> Apache-2.0 — operator, CRDs, charts (ghcr.io) all in-repo</td>
+        <td class="good">Fully open to us, custom; private ECR images + Slurm-from-source</td></tr>
+    <tr><td><b>Architecture model</b></td>
+        <td>K8s operator + Helm; controller/accounting/login/syncer/<b>pod-scheduler</b>; AI-agent-driven install</td>
+        <td>K8s operator; CRDs <code>nodeset</code>/<code>loginset</code>/<code>accounting</code>/<code>restapi</code>/<code>token</code>; slurmctld-as-pod; slurm-bridge = Slurm-as-K8s-scheduler</td>
+        <td>Plain StatefulSets/Deployment + headless-svc DNS; no operator, no CRDs</td></tr>
+    <tr><td><b>License</b></td>
+        <td>Repo Apache-2.0; <b>charts proprietary/commercial</b></td>
+        <td>Operator/CRDs/charts Apache-2.0 — note LICENSE copyright holder is <b>NVIDIA CORPORATION &amp; AFFILIATES (2026)</b> though README brands it "by SchedMD"</td>
+        <td>Ours (Apache-ish wrappers); deployed Slurm is GPLv2; images private</td></tr>
+  </table>
+
+  <h2>Version currency</h2>
+  <p class="mut">Current upstream stable Slurm = <b>26.05</b>, roughly a 6-month major cadence.</p>
+  <table>
+    <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td><b>Slurm version</b></td>
+        <td class="mut">UNVERIFIED — not stated publicly (lives in proprietary charts)</td>
+        <td class="good">Min <b>25.11</b>, min K8s 1.29 — 1 major behind, <b>inside</b> 26.05's direct-upgrade floor</td>
+        <td class="bad"><b>24.05.4</b> pinned, source-built — 4 majors behind, <b>outside</b> the direct-upgrade floor</td></tr>
+  </table>
+
+  <h2>GPU / EFA / RDMA — the decisive row for a P5/P5en fleet</h2>
+  <table>
+    <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td><b>EFA / RDMA</b></td>
+        <td class="bad"><b>Open recipe ships NO EFA.</b> Its own docs: EKS "uses plain TCP for NCCL (no RDMA)… ~1/10th bandwidth… fine for correctness testing but not perf benchmarks." Default <code>g5.xlarge</code> (A10G); no <code>vpc.amazonaws.com/efa</code> or aws-ofi in cluster-config or values</td>
+        <td class="good">Operator is EFA-<i>agnostic</i>, but AWS's ai-on-eks blueprint wires the <b>full path</b>: <code>vpc.amazonaws.com/efa: 1</code> on the slurmd NodeSet + EFA/ofi-nccl from the AWS DLC. Base terraform already provisions P5/P5en EFA infra (<code>efa_instance_types</code> incl. p5/p5e/p5en/p6). Default nodeSelector is <code>g5.8xlarge</code> — P5en is a values edit</td>
+        <td class="warn">GPU via device plugin ✓; EFA <b>env-var only</b> (no <code>vpc.amazonaws.com/efa</code> device, no hostNetwork in the shipped manifest); NCCL-over-EFA multi-node <b>PASS on 2×H100</b></td></tr>
+  </table>
+  <p class="legend">[verified: sunk skills/eks/add-gpu-nodes-to-eks/SKILL.md:238 + infra values (raw-header reads);
+  awslabs/ai-on-eks blueprints/training/slinky-slurm/{slurm-values.yaml.template:85,88,98,
+  dlc-slurmd.Dockerfile:14,56,58} + infra/base/terraform/eks.tf:101,111,215; ours: 08-slurmd-statefulset.yaml:69-76]</p>
+
+  <h2>Scheduling fidelity</h2>
+  <table>
+    <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td><b>Gang / co-scheduling</b></td>
+        <td class="warn">"Pod scheduler" = a K8s custom scheduler (<code>schedulerName: sunk</code>) delegating placement to slurmctld; couples lifecycle via a <code>sunk.coreweave.com/lock</code> NoExecute toleration + a hard <code>terminationGracePeriodSeconds &lt; KillWait−5s</code> rule. Depth = <b>single-scheduler delegation + non-interference</b>, not gang-scheduling a single mixed workload — <b>shallower than slurm-bridge</b></td>
+        <td class="good"><b>Highest</b> — <code>slurm-bridge</code> (v1.2.0) is a K8s scheduler binding <code>Pod</code>/<code>PodGroup</code>/<code>Job</code>/<code>JobSet</code>/<code>LeaderWorkerSet</code> via the Slurm controller → true gang/co-scheduling of K8s + Slurm on shared hardware</td>
+        <td class="warn"><b>Slurm-native within the cluster</b> — slurmctld gang-allocates across slurmd-0/1; no K8s-scheduler co-scheduling</td></tr>
+    <tr><td><b>Preemption</b></td>
+        <td class="mut">UNVERIFIED (proprietary chart)</td>
+        <td class="good">Slurm <code>PreemptMode</code> configurable, exposed to K8s via the bridge</td>
+        <td class="bad"><code>PreemptMode=OFF</code>, <code>Priority=1</code> as shipped</td></tr>
+  </table>
+
+  <h2>Operations, maturity, HyperPod</h2>
+  <table>
+    <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
+    <tr><td><b>Node lifecycle / autoscaling</b></td>
+        <td class="warn">eksctl managed nodegroups, budget profile pins <code>desiredCapacity:1/maxSize:1</code>; NodeSet scale-to-zero present in chart</td>
+        <td class="good"><b>NodeSet scale-to-zero + HPA</b>, drain-before-terminate, DaemonSet or StatefulSet mode</td>
+        <td class="bad">Fixed <code>replicas: 2</code>, no autoscaling; Karpenter is future work</td></tr>
+    <tr><td><b>Operational burden</b></td>
+        <td>Low <i>if licensed</i> (the agent does it), but hard dependency on CoreWeave license + AI agent + proprietary charts</td>
+        <td>Medium — a real operator to run, but self-managing (drain, HA-via-pod-regen, GitOps-able); vendor support available</td>
+        <td class="bad">Highest — you own images, Slurm build, munge keys, DNS, upgrades; no operator, no self-heal</td></tr>
+    <tr><td><b>Maturity</b></td>
+        <td class="bad">6 stars, 0 forks, <b>1 commit</b>, no releases (public repo pushed 2026-07-09)</td>
+        <td class="good">336 stars, 95 forks, <b>1,253+ commits</b>, tags→v1.2.0 (HEAD <code>b2261553</code>, 2026-07-29; recent merges are release-hygiene + govulncheck dep-bumps — a maintenance cadence, no arch change)</td>
+        <td class="warn">Internal; 4 commits, single-author, 2×H100 validation only</td></tr>
+    <tr><td><b>HyperPod compatibility</b></td>
+        <td class="mut">EKS validated E2E; HyperPod-specific UNVERIFIED (needs privileged+hostNetwork — HyperPod-EKS allows, untested)</td>
+        <td class="mut">AWS publishes a Slinky-on-EKS blueprint; HyperPod-specific UNVERIFIED</td>
+        <td class="bad">Named for HyperPod but coupling is <b>naming-only</b>; no SageMaker HyperPod API integration</td></tr>
+  </table>
+
+  <div class="foot">Source of truth: <code>analysis/slurm-k8s-triad/EVALUATION.md</code> (desk analysis
+  2026-07-24, upstream anchors refreshed 2026-07-29). Nothing in this matrix is a measured performance
+  number — see <a href="04-test-plan.html">the test plan</a> for what must be run to get those.</div>
+</div>
+</body>
+</html>

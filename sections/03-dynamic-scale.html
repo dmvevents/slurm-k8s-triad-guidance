@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Can we dynamically scale the Slurm cluster?</title>
+<link rel="stylesheet" href="../assets/site.css"/>
+</head>
+<body>
+<header class="site">
+  <span class="brand">Slurm-on-K8s Triad</span>
+  <nav>
+    <a href="../index.html">Overview</a>
+    <a href="01-what-each-is.html">01 · What each is</a>
+    <a href="02-matrix.html">02 · Matrix</a>
+    <a href="03-dynamic-scale.html" style="color:var(--ink)">03 · Dynamic scale</a>
+    <a href="04-test-plan.html">04 · Test plan</a>
+  </nav>
+</header>
+<div class="wrap">
+  <h1>Can we dynamically scale — and add Kubernetes nodes?</h1>
+  <p class="sub">The question has two independent layers, and conflating them is what makes vendor claims
+  confusing. <b>Layer 1</b> is the Slurm-pod layer: can the number of <code>slurmd</code> pods change (including
+  to zero)? <b>Layer 2</b> is the node layer: can Kubernetes acquire and release actual EC2 instances underneath
+  them? A product can do one and not the other.</p>
+
+  <h2>Layer 1 — Slurm-pod scaling</h2>
+  <div class="cards">
+    <div class="card"><h3 class="warn">SUNK — present but unwired</h3>
+      <p class="mut">The chart has NodeSet scale-to-zero (8 references), but the <i>open</i> EKS recipe does not
+      wire node autoscaling; the eksctl profile pins the nodegroup fixed.</p></div>
+    <div class="card"><h3 class="good">Slinky — yes, first-class</h3>
+      <p class="mut"><code>scalingMode: StatefulSet</code> → <code>replicas: N↔0</code> including scale-to-zero,
+      plus an HPA <b>scale subresource</b> on the NodeSet CRD. Or <code>scalingMode: DaemonSet</code> for
+      one pod per node.</p>
+      <p class="legend">[verified: nodeset_types.go:41 ScalingMode enum, :34 Replicas *int32,
+      :416 <code>+kubebuilder:subresource:scale</code>; values.yaml nodesetDefaults.scalingMode:713]</p></div>
+    <div class="card"><h3 class="bad">Ours — no</h3>
+      <p class="mut"><code>replicas: 2</code> fixed, and <code>NodeName=slurmd-[0-1]</code> is <b>static in
+      slurm.conf</b> — the pool cannot grow without editing the config and restarting.</p>
+      <p class="legend">[verified: 08-slurmd:11; 02-configmaps:64]</p></div>
+  </div>
+
+  <h2>Layer 2 — adding Kubernetes nodes</h2>
+  <div class="cards">
+    <div class="card"><h3 class="warn">SUNK</h3>
+      <p class="mut">Budget profile pins <code>desiredCapacity:1</code>/<code>maxSize:1</code>; only one
+      Karpenter reference in the whole repo. True node autoscaling needs the proprietary operator plus your own
+      Karpenter/Cluster-Autoscaler.</p></div>
+    <div class="card"><h3 class="good">Slinky</h3>
+      <p class="mut"><b>Karpenter.</b> The blueprint pins slurmd to
+      <code>nodeSelector: karpenter.sh/nodepool: g5-nvidia</code>, so nodes provision and deprovision on
+      demand; the ai-on-eks base terraform already provisions P5/P5en EFA infrastructure.</p></div>
+    <div class="card"><h3 class="bad">Ours</h3>
+      <p class="mut">None. No Karpenter, no Cluster-Autoscaler, no HPA wiring. The docs list Karpenter as
+      future work.</p></div>
+  </div>
+
+  <h2>Why drain-awareness is the part that matters operationally</h2>
+  <div class="panel is">
+    <p>Scaling <i>in</i> is the dangerous direction: if Kubernetes deletes a <code>slurmd</code> pod while Slurm
+    still believes the node is allocatable, you lose running jobs. Slinky's operator <b>drains the Slurm node
+    before pod termination</b> on scale-in and upgrade, and supports a PodDisruptionBudget
+    (<code>workloadDisruptionProtection</code>). SUNK's equivalent behaviour is UNVERIFIED (proprietary chart),
+    though it does enforce a related lifecycle rule for its pod scheduler
+    (<code>terminationGracePeriodSeconds &lt; Slurm KillWait − 5s</code>). Ours has <b>no drain-aware
+    controller</b> — the StatefulSet uses <code>podManagementPolicy: Parallel</code> with anti-affinity, and
+    nothing coordinates with slurmctld.</p>
+    <p class="legend">[verified: values.yaml nodesetDefaults:721 + operator README; sunk examples 04/15/16; ours 08-slurmd:12,25]</p>
+  </div>
+
+  <div class="warnbox">
+    <b>Not yet measured:</b> scale-up <i>latency</i>. Pod-layer scaling should be seconds; Karpenter node
+    provisioning for a p5en is minutes — and that difference is what determines whether "dynamic" is useful for
+    bursty training. Test T3 in <a href="04-test-plan.html">the plan</a> measures both, live. No latency number
+    is claimed here because none has been taken.
+  </div>
+
+  <div class="foot">Verdict: <span class="good">Slinky YES</span> ·
+  <span class="warn">SUNK PARTIAL</span> · <span class="bad">Ours NO</span> — on both layers as shipped.</div>
+</div>
+</body>
+</html>

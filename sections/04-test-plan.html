@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>The live test plan — what must be measured</title>
+<link rel="stylesheet" href="../assets/site.css"/>
+</head>
+<body>
+<header class="site">
+  <span class="brand">Slurm-on-K8s Triad</span>
+  <nav>
+    <a href="../index.html">Overview</a>
+    <a href="01-what-each-is.html">01 · What each is</a>
+    <a href="02-matrix.html">02 · Matrix</a>
+    <a href="03-dynamic-scale.html">03 · Dynamic scale</a>
+    <a href="04-test-plan.html" style="color:var(--ink)">04 · Test plan</a>
+  </nav>
+</header>
+<div class="wrap">
+  <h1>The live test plan <span class="pill a">not yet run</span></h1>
+  <p class="sub">Everything on this site so far is desk analysis. These three arms are what convert it into
+  measured fact. They are <b>designed and gated, not executed</b> — each needs a free 2×p5en pair, and this page
+  will carry the numbers once they exist. Publishing the plan before the results is deliberate: it fixes the
+  gates in advance so the numbers cannot be chosen after the fact.</p>
+
+  <h2>T1 — NCCL at scale</h2>
+  <div class="panel">
+    <p><code>all_reduce_perf -b 8 -e 8G -f 2 -g 8</code> across 2× p5en.48xlarge (H200, efa=16/worker), same
+    public nccl-tests image under every arm so the number is comparable.</p>
+    <p><b>Gate:</b> the launcher log must show <code>NET/OFI ... Selected Provider is efa</code> (<b>not</b>
+    Socket/TCP), and <b>busbw ≥ 350 GB/s @ 8 GiB</b>.</p>
+    <p class="mut">Known trap: the three-bug playbook for public-image MPIJobs on fresh EKS — sshd
+    <code>StrictModes</code>, ORTE routing, HPC-X UCC segfault. Set <code>NCCL_NVLS_ENABLE=0</code>.</p>
+    <p class="warn"><b>SUNK is likely a SKIP at perf grade</b> — its open recipe has no EFA, so a SUNK arm would
+    be a TCP correctness run, not a comparable bandwidth number. Running it anyway and labelling it TCP is
+    honest; presenting it beside EFA numbers would not be.</p>
+  </div>
+
+  <h2>T2 — small-training communication scalability</h2>
+  <div class="panel">
+    <p>An identical tiny GPT (~125M, torch DDP or a Megatron micro-config) on each arm: 1 node, then 2 nodes,
+    fixed global batch. Measure step time, the DDP all-reduce fraction (torch profiler), and 1→2 node scaling
+    efficiency.</p>
+    <p><b>Why this arm exists:</b> a raw <code>all_reduce_perf</code> number tells you the fabric works; it does
+    not tell you what a scheduler's placement and plumbing cost a real training step. Same container and EFA env
+    across arms, so the measured delta isolates the scheduler layer (Slinky <code>srun</code> vs ours vs
+    K8s-native).</p>
+    <p><b>Gate:</b> comm fraction must be consistent with T1's busbw — if they disagree, one of the two
+    measurements is wrong and neither gets published.</p>
+  </div>
+
+  <h2>T3 — dynamic scale, live</h2>
+  <div class="panel">
+    <p>Slinky: NodeSet <code>replicas: N↔0</code>, HPA-driven scaling, and a Karpenter node addition — measuring
+    <b>scale-up latency at both layers separately</b> (pod seconds vs node minutes). SUNK: pod layer only, as
+    shipped. Ours: documents the "no" — static <code>slurm.conf</code> node list is the blocker, and that is a
+    finding, not a failure to test.</p>
+    <p><b>Also worth measuring:</b> whether drain-before-terminate actually protects a running job on scale-in.
+    That is the operationally decisive behaviour from <a href="03-dynamic-scale.html">page 03</a>.</p>
+  </div>
+
+  <h2>Capacity discipline (why this is gated)</h2>
+  <div class="panel is">
+    <p>The bake-off needs a genuinely free pair of p5en nodes. "Free" means <b>0 GPUs allocated computed from pod
+    specs</b> — not a low pod count, which is how you accidentally evict someone. Live tenants are never
+    preempted; the cluster lock is claimed before any deploy and released after, with teardown to zero idle
+    spend. At the time of writing only one p5en is free, so all three arms wait.</p>
+  </div>
+
+  <div class="foot">Plan of record: <code>analysis/slurm-k8s-triad/SCALE-TEST-PLAN.md</code>. Results land here
+  and in <code>analysis/slurm-k8s-triad/findings/</code> when the arms run. Until then this page says
+  <span class="warn">not yet run</span>, and that is the honest state.</div>
+</div>
+</body>
+</html>
