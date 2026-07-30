@@ -69,7 +69,7 @@
     <tr><th>Dimension</th><th>SUNK</th><th>Slinky</th><th>Ours</th></tr>
     <tr><td><b>Gang / co-scheduling</b></td>
         <td class="warn">"Pod scheduler" = a K8s custom scheduler (<code>schedulerName: sunk</code>) delegating placement to slurmctld; couples lifecycle via a <code>sunk.coreweave.com/lock</code> NoExecute toleration + a hard <code>terminationGracePeriodSeconds &lt; KillWait−5s</code> rule. Depth = <b>single-scheduler delegation + non-interference</b>, not gang-scheduling a single mixed workload — <b>shallower than slurm-bridge</b></td>
-        <td class="good"><b>Highest</b> — <code>slurm-bridge</code> (v1.2.0) is a K8s scheduler binding <code>Pod</code>/<code>PodGroup</code>/<code>Job</code>/<code>JobSet</code>/<code>LeaderWorkerSet</code> via the Slurm controller → true gang/co-scheduling of K8s + Slurm on shared hardware</td>
+        <td class="good"><b>Highest</b> — <code>slurm-bridge</code> (v1.2.1) is a K8s scheduler binding <code>Pod</code>/<code>PodGroup</code>/<code>Job</code>/<code>JobSet</code>/<code>LeaderWorkerSet</code> via the Slurm controller → true gang/co-scheduling of K8s + Slurm on shared hardware</td>
         <td class="warn"><b>Slurm-native within the cluster</b> — slurmctld gang-allocates across slurmd-0/1; no K8s-scheduler co-scheduling</td></tr>
     <tr><td><b>Preemption</b></td>
         <td class="mut">UNVERIFIED (proprietary chart)</td>
@@ -90,7 +90,7 @@
         <td class="bad">Highest — you own images, Slurm build, munge keys, DNS, upgrades; no operator, no self-heal</td></tr>
     <tr><td><b>Maturity</b></td>
         <td class="bad">6 stars, 0 forks, <b>1 commit</b>, no releases (public repo pushed 2026-07-09)</td>
-        <td class="good">336 stars, 95 forks, <b>1,253+ commits</b>, tags→v1.2.0 (HEAD <code>f7cb32d4</code>, 2026-07-29T16:06Z). <b>Active development, not maintenance:</b> the last 24h went govulncheck dep-bump → helm-version alignment → a <i>feature</i> merge (in-chart vendor overlays). LICENSE copyright is <b>NVIDIA CORPORATION &amp; AFFILIATES (2026)</b> though the README brands it "by SchedMD" — worth confirming current stewardship before any support-contract decision</td>
+        <td class="good">336 stars, 95 forks, <b>1,253+ commits</b>, tags→<b>v1.2.1</b> (released 2026-07-30; HEAD <code>220253ae</code>). <b>Active development, not maintenance:</b> recent cadence went govulncheck dep-bump → helm-version alignment → a <i>feature</i> merge (in-chart vendor overlays) → the v1.2.1 patch release, whose fixes land on the rolling-update/drain machinery (incl. a v1.2.0 bug that could drain a NodeSet to zero available workers on a slow image pull — <b>pin v1.2.1, not v1.2.0</b>). <b>Stewardship resolved:</b> brand + support channel are SchedMD (<code>support.schedmd.com</code>), but commit authorship flipped to <b>96–99% @nvidia.com from mid-January 2026</b> (83% @schedmd.com before) — LICENSE copyright NVIDIA CORPORATION &amp; AFFILIATES (2026) reflects who writes the code. For a support contract, confirm which entity carries the SLA</td>
         <td class="warn">Internal; 4 commits, single-author, 2×H100 validation only</td></tr>
     <tr><td><b>HyperPod compatibility</b></td>
         <td class="mut">EKS validated E2E; HyperPod-specific UNVERIFIED (needs privileged+hostNetwork — HyperPod-EKS allows, untested)</td>
