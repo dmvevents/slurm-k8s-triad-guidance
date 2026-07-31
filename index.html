@@ -36,9 +36,14 @@
     <code>sunk-anywhere</code> repo is an installer/wrapper only — the operator, charts, CRDs and images are
     CoreWeave-proprietary and license-gated — and its open EKS recipe explicitly ships <b>no EFA/RDMA</b>
     (plain TCP NCCL, ~1/10 bandwidth by its own docs, <code>g5.xlarge</code> default). Treat it as a
-    competitive/UX reference, not adoptable perf tech. <b>Ours</b> is the only one we fully control and have
-    actually run NCCL-over-EFA + FSDP + hybrid Slurm↔K8s on — but it is a fixed-size, hand-operated, 2-node
-    demonstrator: no operator, no autoscaling, EFA by env-var rather than device plugin.</p>
+    competitive/UX reference, not adoptable perf tech. <b>Ours</b> is the only one we fully control — and the T1 live bake-off
+    (2× p5en/H200, same pair, same binary) split its verdict cleanly: <b>as-shipped it is unmeasurable</b>
+    (the worker image carries no EFA userspace, MPI, or nccl-tests; the repo's earlier "PASS" was a TCP
+    correctness check), but <b>OURS-fixed — the same static manifests with a working stack — measured
+    477.95&nbsp;GB/s busbw @8GiB under <code>srun</code>, 100.2% of the fabric ceiling (476.95, MPIJob)</b>,
+    while <b>Slinky measured 452.17 (94.8%)</b> after root-causing a silent-TCP fallback in the DLC path.
+    The architecture is at parity; the shipped image is the defect. Still a fixed-size, hand-operated 2-node
+    demonstrator: no operator, no autoscaling.</p>
   </div>
 
   <h2>Three findings worth stating plainly</h2>
