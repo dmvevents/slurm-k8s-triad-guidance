@@ -16,14 +16,15 @@ with its source, and marks as `UNVERIFIED` the things we could not substantiate 
 |---|---|---|---|---|
 | **SUNK** (`coreweave/sunk-anywhere`) | wrapper only; engine proprietary | **none in the open recipe** (plain TCP NCCL) | partial (pod layer) | 1 commit, no releases |
 | **Slinky** (`SlinkyProject/slurm-operator`) | **fully open, Apache-2.0** | **wired** via `awslabs/ai-on-eks` blueprint | **yes** (NodeSet↔0 + HPA + Karpenter) | 1,253+ commits, v1.2.0 |
-| **Ours** (`slurm-on-eks-hyperpod`) | ours, custom | env-var only, no EFA device | no (fixed replicas, static conf) | 2-node demonstrator |
+| **Ours** (`slurm-on-eks-hyperpod`) | ours, custom | env-var only, no EFA device | no as shipped; CLOUD-autoscale PR staged (hermetic tests only) | 2-node demonstrator |
 
 ## Honest scope
 
-This is **desk analysis**. The performance arms — NCCL busbw at scale, small-training communication
-scalability, and scale-up latency — are **designed but not yet run** (they need a free 2×p5en pair). No
-measured performance number appears on the site until it has actually been taken. See section 04 for the
-pre-registered gates.
+Desk analysis plus one live arm. **T1 (NCCL busbw at scale) has been run** on a 2×p5en pair
+(2026-07-30): raw-MPIJob ceiling 476.95 GB/s, static-manifest arm 477.95 (parity), operator-managed
+arm 452.17 (94.8%) — see the matrix and landing verdict. The remaining arms — small-training
+communication scalability and scale-up latency — are **designed but not yet run**. No number appears
+on the site before it has actually been taken. See section 04 for the pre-registered gates.
 
 ## Structure
 
