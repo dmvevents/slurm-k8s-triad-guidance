@@ -46,6 +46,38 @@
     demonstrator: no operator, no autoscaling.</p>
   </div>
 
+  <h2>What we built on top (update 2026-08-11)</h2>
+  <div class="panel">
+    <p>The desk analysis above produced four concrete artifacts, one per gap it found. Statuses are
+    honest: nothing below is claimed as live-verified until it has run on a cluster.</p>
+    <ul>
+      <li><b>Ours — CLOUD/power-save autoscale (the "no dynamic scale" fix):</b> warm floor
+      <code>slurmd-[0-1]</code> + elastic <code>slurmd-[2-15] State=CLOUD</code>; Slurm's
+      Suspend/ResumeProgram drive the StatefulSet <b>scale subresource</b> via name-scoped RBAC,
+      tail-only scale-down. Staged as a PR on our repo; hermetic tests 6/6, <i>not yet live</i> —
+      the matrix verdict stands until it is.</li>
+      <li><b>Slinky — <code>aws/p5</code> vendor overlay (upstream PR, staged):</b> the chart ships
+      vendor overlays for <code>google/a3ultra</code>+<code>a3mega</code> and <code>nvidia</code>
+      but has <b>no aws entry</b>, and <code>applyVendorPatches</code> dispatches through a
+      hardcoded include chain — so EFA on P5 needs an upstream template PR, not a values edit.
+      We built that overlay following the a3ultra pattern end-to-end (example values for
+      p5.48xlarge <code>efaCount: 32</code>, nodeset snippet with the EFA device/hugepages/shm/env
+      plumbing, helpers + 8 chart tests, helm-docs). Renders verified against upstream
+      <code>952be03</code>; conflict-checked against the open PR queue (#218 #204 #200 #175 #166 —
+      zero template overlap). Awaiting filing.</li>
+      <li><b>Topology awareness:</b> a generator that emits Slurm <code>topology.conf</code> (tree)
+      plus <code>topology.slinky.slurm.net/*</code> node-annotation commands from real node data
+      (28/28 tests).</li>
+      <li><b>The replicable A/B harness:</b> six lanes behind one NCCL/EFA fabric gate — FSDP and
+      torchtitan v0.2.2 training A/Bs (compute-bound: arms are <i>expected to tie</i>, bounding the
+      scheduler tax) plus scheduler-only probes where arms genuinely differ: churn
+      (submit→start latency), node-split (8×1-GPU concurrent), workload-split (het jobs), and
+      elastic scale-up/down latency.</li>
+    </ul>
+    <p class="mut">The T1 numbers on this page (477.95 / 452.17 vs ceiling 476.95) remain the only
+    MEASURED performance rows; the harness and probes convert the rest on the next cluster window.</p>
+  </div>
+
   <h2>Three findings worth stating plainly</h2>
   <div class="cards">
     <div class="card">
