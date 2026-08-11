@@ -39,10 +39,16 @@
       <p class="mut"><code>replicas: 2</code> fixed, and <code>NodeName=slurmd-[0-1]</code> is <b>static in
       slurm.conf</b> — the pool cannot grow without editing the config and restarting.</p>
       <p class="legend">[verified: 08-slurmd:11; 02-configmaps:64]</p>
-      <p class="mut"><b>Update 2026-08-11:</b> a CLOUD/power-save autoscale PR is staged against our repo
-      (warm floor slurmd-[0-1] + elastic slurmd-[2-15] <code>State=CLOUD</code>; Suspend/ResumeProgram drive
-      the StatefulSet <b>scale subresource</b> via name-scoped RBAC; tail-only scale-down). Status: hermetic
-      tests 6/6 only — <b>not yet run on a live cluster</b>, so the verdict row above stands until it is.</p></div>
+      <p class="mut"><b>Update 2026-08-11 — LIVE-VERIFIED:</b> the CLOUD/power-save autoscale PR (warm floor
+      + elastic <code>State=CLOUD</code> tail; Suspend/ResumeProgram drive the StatefulSet <b>scale
+      subresource</b> via name-scoped RBAC; tail-only scale-down) ran E2E on EKS: one 4-node
+      <code>sbatch</code> from the 2-node floor → <b>replicas 2→4 in ≤13&nbsp;s, job RUNNING at 23&nbsp;s</b>,
+      suspend tail-peel back to 2 on schedule (m5 CPU nodes — the scale mechanics are node-type-independent).
+      The live run surfaced three container-specific requirements now baked into the PR:
+      <code>SlurmctldParameters=cloud_dns</code> (else the CLOUD node's registration rewrites NodeAddr to an
+      unresolvable short hostname → ResumeTimeout DOWN), <code>slurmd -b</code> (else /proc/uptime = host boot
+      time and the controller never sees a "new boot"), and python3-urllib helpers (SchedMD images ship no
+      curl). Verdict row updates to <b>"yes — via PR#1"</b> once merged; as shipped on main it remains no.</p></div>
   </div>
 
   <h2>Layer 2 — adding Kubernetes nodes</h2>
